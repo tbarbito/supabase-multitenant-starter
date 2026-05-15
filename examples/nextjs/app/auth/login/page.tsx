@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 
-export default function LoginPage() {
+// Componente real do form, isolado para poder ficar dentro do Suspense.
+// useSearchParams() requer Suspense boundary no Next.js 15 quando há
+// static generation (build prerendering).
+function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState('');
@@ -29,16 +32,24 @@ export default function LoginPage() {
   }
 
   return (
+    <form onSubmit={onSubmit} className="card" style={{ marginTop: 16 }}>
+      <label className="label">Email</label>
+      <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input" />
+      <label className="label">Senha</label>
+      <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
+      <button className="btn" disabled={loading}>{loading ? 'Entrando…' : 'Entrar'}</button>
+      {error && <p className="error">{error}</p>}
+    </form>
+  );
+}
+
+export default function LoginPage() {
+  return (
     <div className="container" style={{ maxWidth: 420 }}>
       <h1>Entrar</h1>
-      <form onSubmit={onSubmit} className="card" style={{ marginTop: 16 }}>
-        <label className="label">Email</label>
-        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input" />
-        <label className="label">Senha</label>
-        <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
-        <button className="btn" disabled={loading}>{loading ? 'Entrando…' : 'Entrar'}</button>
-        {error && <p className="error">{error}</p>}
-      </form>
+      <Suspense fallback={<div className="card" style={{ marginTop: 16 }}>Carregando…</div>}>
+        <LoginForm />
+      </Suspense>
       <p>
         Não tem conta? <Link href="/auth/signup">Criar agora</Link>
       </p>
