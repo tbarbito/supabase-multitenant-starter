@@ -61,3 +61,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Material de divulgação pessoal — não publicar no repo open source
+marketing/
