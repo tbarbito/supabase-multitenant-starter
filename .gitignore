@@ -1,0 +1,63 @@
+# ============================================================================
+# Segredos — NUNCA versionar
+# ============================================================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+service-account.json
+
+# ============================================================================
+# Supabase
+# ============================================================================
+# Estado local do CLI (contém tokens efêmeros)
+.branches/
+.temp/
+supabase/.branches/
+supabase/.temp/
+
+# Logs do Docker local
+supabase/logs/
+
+# Dumps de banco
+*.dump
+*.sql.gz
+
+# Tipos gerados (regenerados via `supabase gen types`)
+examples/**/database.types.ts
+packages/**/database.types.ts
+
+# ============================================================================
+# Node / Next.js
+# ============================================================================
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.pnpm-debug.log*
+npm-debug.log*
+yarn-error.log*
+
+# ============================================================================
+# Python (para exemplos futuros)
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+*.egg-info/
+
+# ============================================================================
+# Sistema operacional / editores
+# ============================================================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

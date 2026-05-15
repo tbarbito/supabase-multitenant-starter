@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.45.0"
+  },
+  "tasks": {
+    "dev": "deno run --allow-all --watch index.ts"
+  }
+}

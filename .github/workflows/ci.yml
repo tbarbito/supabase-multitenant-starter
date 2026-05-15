@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ===========================================================================
+  # Lint SQL — pega problemas estáticos antes de rodar nada
+  # ===========================================================================
+  sql-lint:
+    name: Lint SQL migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Lint
+        run: supabase db lint --schema public
+
+  # ===========================================================================
+  # Testes RLS — sobe Postgres + roda pgTAP
+  # ===========================================================================
+  rls-tests:
+    name: RLS tests (pgTAP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase
+        run: supabase start
+
+      - name: Run tests
+        run: supabase test db
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup
+
+  # ===========================================================================
+  # Geração de types TypeScript — garante que types compilam
+  # ===========================================================================
+  generate-types:
+    name: TypeScript types from schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Start Supabase
+        run: supabase start
+
+      - name: Generate types
+        run: supabase gen types typescript --local > examples/nextjs/lib/database.types.ts
+
+      - name: Type-check Next.js example
+        working-directory: examples/nextjs
+        run: |
+          npm install
+          npx tsc --noEmit
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup
+
+  # ===========================================================================
+  # Lint TypeScript / Deno na Edge Function
+  # ===========================================================================
+  edge-functions-check:
+    name: Edge Functions (deno check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      - name: Deno check
+        run: deno check supabase/functions/invitations/index.ts
