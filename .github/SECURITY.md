@@ -4,7 +4,7 @@
 
 Se você descobriu uma vulnerabilidade neste template, **não abra uma issue pública**.
 
-Envie um email para `security@biizhubflow.com` com:
+Use o [GitHub Security Advisory](https://github.com/tbarbito/supabase-multitenant-starter/security/advisories/new) (disclosure privado) e inclua:
 - Descrição da vulnerabilidade
 - Passos para reproduzir
 - Impacto potencial

@@ -152,6 +152,6 @@ Por padrão, audit_log não é purgado. Sugestões:
 
 Se você encontrou uma falha de segurança neste template, **NÃO abra issue pública**.
 
-Envie para: `security@biizhubflow.com` (substitua pelo seu email)
+Envie via [GitHub Security Advisory](https://github.com/tbarbito/supabase-multitenant-starter/security/advisories/new) (disclosure privado).
 
 Aceitamos disclosure responsável e creditamos quem reportar.

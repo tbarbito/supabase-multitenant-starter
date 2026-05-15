@@ -301,4 +301,4 @@ supabase db reset   # APENAS LOCAL — nunca rode em prod
 
 - Issues: [github.com/.../issues](#)
 - Discussions: [github.com/.../discussions](#)
-- Security: `security@biizhubflow.com`
+- Security: via [GitHub Security Advisory](https://github.com/tbarbito/supabase-multitenant-starter/security/advisories/new)

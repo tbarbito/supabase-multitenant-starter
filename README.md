@@ -147,6 +147,6 @@ MIT — veja [LICENSE](LICENSE).
 
 ## Créditos
 
-Criado por [Tiago Barbieri (Barbito)](https://github.com/tbarbito) na [BiizHubFlow](https://biizhubflow.com).
+Criado por [Tiago Barbieri (Barbito)](https://github.com/tbarbito).
 
 Inspirações: Supabase docs, [Supabase Auth Helpers](https://github.com/supabase/auth-helpers), padrões de multi-tenancy de Slack, Linear e Vercel.
