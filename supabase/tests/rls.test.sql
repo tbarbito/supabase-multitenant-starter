@@ -7,16 +7,14 @@
 
 BEGIN;
 
--- Carrega pgTAP
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path TO extensions, public, auth;
 
 -- =============================================================================
--- Setup: cria 2 usuários e 2 empresas
+-- Setup: cria 3 usuários e 1 empresa (alice=owner, bob=member, eve=fora)
 -- =============================================================================
 SELECT plan(15);
 
--- Cria usuários direto (test only)
 INSERT INTO auth.users (id, email, instance_id, aud, role, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, confirmation_token, email_change, email_change_token_new, recovery_token, created_at, updated_at)
 VALUES
     ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'alice@test.com', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '', now(), '{}'::jsonb, '{"skip_auto_company":true}'::jsonb, '', '', '', '', now(), now()),
@@ -24,25 +22,24 @@ VALUES
     ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'eve@test.com',   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '', now(), '{}'::jsonb, '{"skip_auto_company":true}'::jsonb, '', '', '', '', now(), now())
 ON CONFLICT DO NOTHING;
 
--- Cria empresa (como service role para bypassar RLS de signup)
 INSERT INTO public.companies (id, name, slug, created_by) VALUES
     ('11111111-1111-1111-1111-111111111111', 'Test Co', 'test-co', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
 ON CONFLICT DO NOTHING;
 
+-- O trigger set_company_creator já adicionou alice como owner.
+-- Bob entra como member (via service_role bypassando policy de INSERT).
 INSERT INTO public.memberships (company_id, user_id, role) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'owner'),
     ('11111111-1111-1111-1111-111111111111', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'member')
 ON CONFLICT DO NOTHING;
 
 -- =============================================================================
--- Helper: simula contexto de usuário autenticado
+-- Helpers: alternar entre contextos authenticated/superuser
 -- =============================================================================
 CREATE OR REPLACE FUNCTION test_as_user(_uid uuid) RETURNS void
 LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM set_config('request.jwt.claims',
-        json_build_object('sub', _uid, 'role', 'authenticated')::text,
-        true);
+        json_build_object('sub', _uid, 'role', 'authenticated')::text, true);
     PERFORM set_config('role', 'authenticated', true);
 END $$;
 
@@ -54,7 +51,7 @@ BEGIN
 END $$;
 
 -- =============================================================================
--- Test 1: membro vê a própria empresa
+-- Test 1: owner vê a própria empresa
 -- =============================================================================
 SELECT test_as_user('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
@@ -85,18 +82,21 @@ SELECT ok(
 );
 
 -- =============================================================================
--- Test 4: member não consegue UPDATE em company
+-- Test 4: member não consegue UPDATE em company (RLS bloqueia silenciosamente)
 -- =============================================================================
+-- RLS UPDATE que não bate na USING NÃO joga erro — apenas afeta 0 linhas.
+-- Validamos comparando o nome antes e depois.
 SELECT test_as_user('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 
-SELECT throws_ok(
-    $$UPDATE public.companies SET name = 'Hacked' WHERE id = '11111111-1111-1111-1111-111111111111'$$,
-    NULL,
-    NULL,
-    'member não pode atualizar empresa (RLS bloqueia silenciosamente)'
+UPDATE public.companies SET name = 'Hacked' WHERE id = '11111111-1111-1111-1111-111111111111';
+
+SELECT test_reset();  -- volta a superuser para conseguir ler o nome real
+
+SELECT is(
+    (SELECT name FROM public.companies WHERE id = '11111111-1111-1111-1111-111111111111'),
+    'Test Co',
+    'member NÃO consegue alterar nome da empresa (RLS bloqueia silenciosamente)'
 );
--- NOTA: RLS UPDATE que não bate na USING não dá erro, só não atualiza nada.
--- Verificamos pelo affected count em outro teste.
 
 -- =============================================================================
 -- Test 5: owner pode atualizar empresa
@@ -105,6 +105,8 @@ SELECT test_as_user('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
 UPDATE public.companies SET name = 'Test Co (renomeada)'
 WHERE id = '11111111-1111-1111-1111-111111111111';
+
+SELECT test_reset();
 
 SELECT is(
     (SELECT name FROM public.companies WHERE id = '11111111-1111-1111-1111-111111111111'),
@@ -115,16 +117,18 @@ SELECT is(
 -- =============================================================================
 -- Test 6: não permite remover o último owner
 -- =============================================================================
-SELECT test_reset();
-
--- Remove o member para deixar só o owner
+-- Removemos Bob (como superuser) para deixar só Alice como owner.
 DELETE FROM public.memberships
 WHERE company_id = '11111111-1111-1111-1111-111111111111'
   AND user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
+-- Tentativa de remover Alice — trigger guard_membership_change deve bloquear.
+-- SQLSTATE 23514 = check_violation
+SELECT test_as_user('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+
 SELECT throws_ok(
     $$DELETE FROM public.memberships WHERE company_id = '11111111-1111-1111-1111-111111111111' AND user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-    'check_violation',
+    '23514',
     NULL,
     'remoção do último owner é bloqueada'
 );
@@ -134,7 +138,7 @@ SELECT throws_ok(
 -- =============================================================================
 SELECT throws_ok(
     $$UPDATE public.memberships SET role = 'member' WHERE company_id = '11111111-1111-1111-1111-111111111111' AND user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
-    'check_violation',
+    '23514',
     NULL,
     'rebaixar último owner é bloqueado'
 );
@@ -151,9 +155,11 @@ SELECT ok(public.has_role_in('11111111-1111-1111-1111-111111111111', 'admin'::pu
 SELECT ok(public.has_role_in('11111111-1111-1111-1111-111111111111', 'owner'::public.app_role),
     'owner tem role >= owner');
 
--- Re-adiciona Bob como member
+-- Re-adiciona Bob (como superuser, bypassando ausência de policy INSERT)
+SELECT test_reset();
 INSERT INTO public.memberships (company_id, user_id, role) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'member');
+    ('11111111-1111-1111-1111-111111111111', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'member')
+ON CONFLICT DO NOTHING;
 
 SELECT test_as_user('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 
@@ -163,7 +169,7 @@ SELECT ok(NOT public.has_role_in('11111111-1111-1111-1111-111111111111', 'admin'
     'member NÃO tem role >= admin');
 
 -- =============================================================================
--- Test 9: audit_log é INSERT-only pelo cliente
+-- Test 9: audit_log é INSERT-only pelo cliente (deve dar 42501 = insufficient_privilege)
 -- =============================================================================
 SELECT throws_ok(
     $$INSERT INTO public.audit_log (action, company_id) VALUES ('company.created', '11111111-1111-1111-1111-111111111111')$$,
@@ -173,11 +179,11 @@ SELECT throws_ok(
 );
 
 -- =============================================================================
--- Test 10: profile só pode ser atualizado pelo dono
+-- Test 10/11: profile só pode ser atualizado pelo dono
 -- =============================================================================
-SELECT test_as_user('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
-
 UPDATE public.profiles SET full_name = 'Bob (próprio)' WHERE id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+SELECT test_reset();
 
 SELECT is(
     (SELECT full_name FROM public.profiles WHERE id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'),
@@ -185,9 +191,10 @@ SELECT is(
     'usuário atualiza próprio perfil'
 );
 
--- Tentativa de atualizar perfil alheio: RLS filtra silenciosamente, 0 linhas afetadas
+SELECT test_as_user('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 UPDATE public.profiles SET full_name = 'Hacked' WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
+SELECT test_reset();
 SELECT isnt(
     (SELECT full_name FROM public.profiles WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
     'Hacked',
