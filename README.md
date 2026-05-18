@@ -114,6 +114,7 @@ Abra `http://localhost:3000`. Use as credenciais de seed:
 - 📐 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — modelo de dados e decisões
 - 🔐 [`docs/SECURITY.md`](docs/SECURITY.md) — modelo de ameaças, RLS, hardening
 - 🚀 [`docs/QUICKSTART.md`](docs/QUICKSTART.md) — tutorial completo passo a passo
+- 🤖 [`docs/USING-WITH-AI.md`](docs/USING-WITH-AI.md) — como usar o template com Claude/ChatGPT/Cursor sem quebrar os padrões
 
 ---
 
